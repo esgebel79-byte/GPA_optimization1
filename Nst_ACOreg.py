@@ -36,6 +36,8 @@ class AntColonyRegulator(NstRegulatorBase):
         self.cost_history = []
         self.best_cost = float("inf")
         self.best_solution = None
+        self.pheromone_history = []  # История феромонов по итерациям
+        self.attractiveness_history = []  # История привлекательности по итерациям
 
     def _evaluate_fitness(self, nst_vals, gpa_list, comp_list, Pin, Tin, Q_target, P_out_req=None):
         """Расчёт функционала для набора оборотов."""
@@ -173,6 +175,10 @@ class AntColonyRegulator(NstRegulatorBase):
             
             # Ограничение феромонов от стагнации
             pheromone = np.clip(pheromone, 0.1, 10.0)
+            
+            # === СОХРАНЕНИЕ ИСТОРИИ ДЛЯ ВИЗУАЛИЗАЦИИ ===
+            self.pheromone_history.append(pheromone.copy())
+            self.attractiveness_history.append(attractiveness.copy())
         
         # === ОГРАНИЧЕНИЕ НА МАКСИМАЛЬНОЕ ИЗМЕНЕНИЕ ОБОРОТОВ ===
         final_pos = np.clip(self.best_solution, lb, ub)

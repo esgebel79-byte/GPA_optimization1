@@ -62,6 +62,53 @@ regulators = {
 if REGULATION_MODE not in regulators:
     raise ValueError(f"Неподдерживаемый режим: {REGULATION_MODE}. Доступные: {list(regulators.keys())}")
 
+# === ВЫВОД ПАРАМЕТРОВ АЛГОРИТМОВ ===
+print(f"\n{'='*100}")
+print("ПАРАМЕТРЫ АЛГОРИТМОВ ОПТИМИЗАЦИИ")
+print(f"{'='*100}\n")
+
+# PID параметры
+pid_reg = regulators["PID"]
+print("PID РЕГУЛЯТОР:")
+print(f"  Kp (пропорциональный коэффициент): {pid_reg.Kp}")
+print(f"  Ki (интегральный коэффициент): {pid_reg.Ki}")
+print(f"  Kd (дифференциальный коэффициент): {pid_reg.Kd}")
+print(f"  nst_step_max (макс. изменение оборотов): {pid_reg.nst_step_max}")
+print()
+
+# PSO параметры
+pso_reg = regulators["PSO"]
+print("PSO (PARTICLE SWARM OPTIMIZATION):")
+print(f"  n_particles (кол-во частиц): {pso_reg.n_particles}")
+print(f"  iters (кол-во итераций): {pso_reg.iters}")
+print(f"  c1 (познавательный параметр): {pso_reg.options['c1']}")
+print(f"  c2 (социальный параметр): {pso_reg.options['c2']}")
+print(f"  w (инерционный вес): {pso_reg.options['w']}")
+print(f"  delta_nst_max (макс. шаг изменения): {pso_reg.delta_nst_max}")
+print()
+
+# GWO параметры
+gwo_reg = regulators["GWO"]
+print("GWO (GREY WOLF OPTIMIZER):")
+print(f"  n_wolves (кол-во волков): {gwo_reg.n_wolves}")
+print(f"  iters (кол-во итераций): {gwo_reg.iters}")
+print(f"  max_nst_step (макс. изменение оборотов): {gwo_reg.max_nst_step}")
+print()
+
+# ACO параметры
+aco_reg = regulators["ACO"]
+print("ACO (ANT COLONY OPTIMIZATION):")
+print(f"  n_ants (кол-во муравьёв): {aco_reg.n_ants}")
+print(f"  iters (кол-во итераций): {aco_reg.iters}")
+print(f"  alpha (важность феромона): {aco_reg.alpha}")
+print(f"  beta (важность привлекательности): {aco_reg.beta}")
+print(f"  rho (скорость испарения феромона): {aco_reg.rho}")
+print(f"  q (константа для феромона): {aco_reg.q}")
+print(f"  max_nst_step (макс. изменение оборотов): {aco_reg.max_nst_step}")
+print()
+
+print(f"{'='*100}\n")
+
 regulator = regulators[REGULATION_MODE]
 prev_nst = np.array([4500.0, 4600.0, 4400.0]) 
 q_cumulative_actual = 0.0
@@ -366,6 +413,109 @@ if REGULATION_MODE == "ACO" and hasattr(regulator, 'cost_history'):
     print(f"График сходимости ACO сохранен: {os.path.abspath(convergence_filename)}")
     
     plt.show()
+
+# === ВИЗУАЛИЗАЦИЯ РАСПРЕДЕЛЕНИЯ ФЕРОМОНОВ ДЛЯ ACO ===
+if REGULATION_MODE == "ACO" and hasattr(regulator, 'pheromone_history') and len(regulator.pheromone_history) > 0:
+    pheromone_history = regulator.pheromone_history
+    
+    # Агрегируем феромоны по итерациям и сегментам
+    n_iterations = len(pheromone_history)
+    n_dims = pheromone_history[0].shape[0] if len(pheromone_history[0].shape) > 1 else pheromone_history[0].size
+    
+    # Вычисляем среднее значение феромонов для каждой итерации
+    pheromone_means = []
+    for iteration_phero in pheromone_history:
+        if len(iteration_phero.shape) > 1:
+            mean_val = np.mean(iteration_phero)
+        else:
+            mean_val = np.mean(iteration_phero)
+        pheromone_means.append(mean_val)
+    
+    # Создаем визуализацию тепловой карты
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Преобразуем историю в матрицу для heatmap
+    if len(pheromone_history[0].shape) > 1:
+        pheromone_matrix = np.array([np.mean(p, axis=1) for p in pheromone_history]).T
+    else:
+        pheromone_matrix = np.array(pheromone_means).reshape(1, -1)
+    
+    im = ax.imshow(pheromone_matrix, aspect='auto', cmap='hot', interpolation='bilinear')
+    ax.set_xlabel('Итерация', fontsize=12, weight='bold')
+    ax.set_ylabel('Размерность', fontsize=12, weight='bold')
+    ax.set_title('Распределение феромонов в алгоритме ACO', fontsize=14, weight='bold')
+    
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('Интенсивность феромона', fontsize=11, weight='bold')
+    
+    pheromone_heatmap_filename = os.path.join("results", f"aco_pheromone_heatmap_{Q_TARGET_DAY:.0f}.png")
+    plt.savefig(pheromone_heatmap_filename, dpi=150, bbox_inches='tight')
+    print(f"Тепловая карта феромонов ACO сохранена: {os.path.abspath(pheromone_heatmap_filename)}")
+    
+    plt.show()
+
+# === АНАЛИЗ ВЛИЯНИЯ ФЕРОМОНОВ ВС ПРИВЛЕКАТЕЛЬНОСТИ ===
+if REGULATION_MODE == "ACO" and hasattr(regulator, 'pheromone_history') and hasattr(regulator, 'attractiveness_history'):
+    if len(regulator.pheromone_history) > 0 and len(regulator.attractiveness_history) > 0:
+        pheromone_history = regulator.pheromone_history
+        attractiveness_history = regulator.attractiveness_history
+        
+        n_iterations = min(len(pheromone_history), len(attractiveness_history))
+        
+        # Вычисляем средние значения феромона и привлекательности
+        pheromone_influence = []
+        attractiveness_influence = []
+        
+        for i in range(n_iterations):
+            phero = pheromone_history[i]
+            attr = attractiveness_history[i]
+            
+            # Вычисляем средние значения
+            phero_mean = np.mean(phero) if phero.size > 0 else 0
+            attr_mean = np.mean(attr) if attr.size > 0 else 0
+            
+            pheromone_influence.append(phero_mean)
+            attractiveness_influence.append(attr_mean)
+        
+        # Нормализуем для сравнения
+        phero_max = max(pheromone_influence) if max(pheromone_influence) > 0 else 1
+        attr_max = max(attractiveness_influence) if max(attractiveness_influence) > 0 else 1
+        
+        pheromone_normalized = [p / phero_max for p in pheromone_influence]
+        attractiveness_normalized = [a / attr_max for a in attractiveness_influence]
+        
+        # Создаем график сравнения влияния
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+        
+        # График 1: Абсолютные значения
+        iterations = range(n_iterations)
+        ax1.plot(iterations, pheromone_influence, 'b-', linewidth=2.5, marker='o', markersize=5, label='Феромоны (τ)')
+        ax1.plot(iterations, attractiveness_influence, 'g-', linewidth=2.5, marker='s', markersize=5, label='Привлекательность (η)')
+        ax1.set_xlabel('Итерация', fontsize=12, weight='bold')
+        ax1.set_ylabel('Среднее значение', fontsize=12, weight='bold')
+        ax1.set_title('Абсолютные значения: Феромоны vs Привлекательность', fontsize=13, weight='bold')
+        ax1.legend(fontsize=11, loc='best')
+        ax1.grid(True, alpha=0.3)
+        
+        # График 2: Нормализованные значения (стacked area)
+        ax2.fill_between(iterations, 0, pheromone_normalized, alpha=0.6, label='Влияние феромонов (τ)', color='blue')
+        ax2.fill_between(iterations, pheromone_normalized, 
+                        [p + a for p, a in zip(pheromone_normalized, attractiveness_normalized)],
+                        alpha=0.6, label='Влияние привлекательности (η)', color='green')
+        ax2.set_xlabel('Итерация', fontsize=12, weight='bold')
+        ax2.set_ylabel('Нормализованное влияние', fontsize=12, weight='bold')
+        ax2.set_title('Относительное влияние компонентов алгоритма ACO', fontsize=13, weight='bold')
+        ax2.legend(fontsize=11, loc='best')
+        ax2.grid(True, alpha=0.3)
+        ax2.set_ylim([0, 2])
+        
+        plt.tight_layout()
+        
+        influence_filename = os.path.join("results", f"aco_influence_analysis_{Q_TARGET_DAY:.0f}.png")
+        plt.savefig(influence_filename, dpi=150, bbox_inches='tight')
+        print(f"Анализ влияния компонентов ACO сохранен: {os.path.abspath(influence_filename)}")
+        
+        plt.show()
 
 # === ФУНКЦИЯ ДЛЯ СРАВНЕНИЯ АЛГОРИТМОВ PSO И GWO ===
 def run_simulation_and_collect_results(regulation_mode, gpa_instances, comp_instances, pin_profile, 
@@ -1011,6 +1161,129 @@ comp_instances_for_pid = [
 pid_results = run_simulation_and_collect_results("PID", gpa_instances_for_pid, comp_instances_for_pid, pin_profile, 
                                                   Q_TARGET_DAY, SIMULATION_HOURS, Tin_ext)
 create_final_parameters_table_from_results("PID", pid_results, Q_TARGET_DAY)
+
+# === СОЗДАНИЕ ТАБЛИЦЫ ГИПЕРПАРАМЕТРОВ ВСЕХ АЛГОРИТМОВ ===
+def create_hyperparameters_table(regulators_dict, Q_TARGET_DAY):
+    """
+    Создаёт и сохраняет таблицу со всеми гиперпараметрами алгоритмов.
+    """
+    print(f"\n{'='*100}")
+    print("СОЗДАНИЕ ТАБЛИЦЫ ГИПЕРПАРАМЕТРОВ")
+    print(f"{'='*100}\n")
+    
+    # Подготовка данных
+    table_data = []
+    
+    # PID
+    pid_reg = regulators_dict["PID"]
+    table_data.append([
+        "PID",
+        f"{pid_reg.Kp}",
+        f"{pid_reg.Ki}",
+        f"{pid_reg.Kd}",
+        "-",
+        "-",
+        "-",
+        f"{pid_reg.nst_step_max}"
+    ])
+    
+    # PSO
+    pso_reg = regulators_dict["PSO"]
+    table_data.append([
+        "PSO",
+        f"{pso_reg.n_particles}",
+        f"{pso_reg.iters}",
+        f"{pso_reg.options['c1']}",
+        f"{pso_reg.options['c2']}",
+        f"{pso_reg.options['w']}",
+        "-",
+        f"{pso_reg.delta_nst_max}"
+    ])
+    
+    # GWO
+    gwo_reg = regulators_dict["GWO"]
+    table_data.append([
+        "GWO",
+        f"{gwo_reg.n_wolves}",
+        f"{gwo_reg.iters}",
+        "-",
+        "-",
+        "-",
+        "-",
+        f"{gwo_reg.max_nst_step}"
+    ])
+    
+    # ACO
+    aco_reg = regulators_dict["ACO"]
+    table_data.append([
+        "ACO",
+        f"{aco_reg.n_ants}",
+        f"{aco_reg.iters}",
+        f"{aco_reg.alpha}",
+        f"{aco_reg.beta}",
+        f"{aco_reg.rho}",
+        f"{aco_reg.q}",
+        f"{aco_reg.max_nst_step}"
+    ])
+    
+    # Создание таблицы
+    fig, ax = plt.subplots(figsize=(16, 6))
+    ax.axis('tight')
+    ax.axis('off')
+    
+    columns = ['Алгоритм', 'Pop/Кол-во', 'Итерации', 'c1/Alpha', 'c2/Beta', 'w/Rho', 'q', 'Max Step']
+    
+    table = ax.table(cellText=table_data, colLabels=columns, cellLoc='center', loc='center',
+                     colWidths=[0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.14])
+    
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1, 3)
+    
+    # Стилизация заголовков
+    for i in range(len(columns)):
+        table[(0, i)].set_facecolor('#1F4E78')
+        table[(0, i)].set_text_props(weight='bold', color='white', fontsize=12)
+    
+    # Цветные строки для каждого алгоритма
+    colors = ['#FFC000', '#4472C4', '#70AD47', '#C55A11']  # PID, PSO, GWO, ACO
+    for i in range(1, len(table_data) + 1):
+        for j in range(len(columns)):
+            table[(i, j)].set_facecolor(colors[i-1])
+            table[(i, j)].set_text_props(weight='bold', color='white', fontsize=11)
+    
+    plt.title('Гиперпараметры всех алгоритмов оптимизации', fontsize=15, weight='bold', pad=20)
+    
+    # Сохранение
+    table_filename = os.path.join("results", f"hyperparameters_all_algorithms_{Q_TARGET_DAY:.0f}.png")
+    plt.savefig(table_filename, dpi=150, bbox_inches='tight')
+    print(f">>> Таблица гиперпараметров сохранена: {os.path.abspath(table_filename)}\n")
+    plt.close()
+    
+    # Сохранение в CSV
+    csv_filename = os.path.join("results", f"hyperparameters_all_algorithms_{Q_TARGET_DAY:.0f}.csv")
+    with open(csv_filename, 'w', newline='', encoding='utf-8-sig') as csvfile:
+        writer_csv = __import__('csv').writer(csvfile, delimiter=';')
+        
+        writer_csv.writerow(['ГИПЕРПАРАМЕТРЫ ВСЕХ АЛГОРИТМОВ ОПТИМИЗАЦИИ'])
+        writer_csv.writerow([f'Целевой расход: {Q_TARGET_DAY:.1f} тыс.м³/сутки'])
+        writer_csv.writerow([])
+        
+        writer_csv.writerow(columns)
+        for row in table_data:
+            writer_csv.writerow(row)
+        
+        writer_csv.writerow([])
+        writer_csv.writerow(['ОПИСАНИЕ ПАРАМЕТРОВ'])
+        writer_csv.writerow(['PID: Kp, Ki, Kd - коэффициенты регулятора; nst_step_max - макс. шаг'])
+        writer_csv.writerow(['PSO: n_particles - кол-во частиц; iters - итерации; c1,c2 - параметры; w - инерционный вес'])
+        writer_csv.writerow(['GWO: n_wolves - кол-во волков; iters - итерации'])
+        writer_csv.writerow(['ACO: n_ants - кол-во муравьёв; iters - итерации; alpha,beta,rho,q - параметры феромона'])
+    
+    print(f">>> CSV таблица гиперпараметров сохранена: {os.path.abspath(csv_filename)}\n")
+
+# Создание таблицы гиперпараметров
+create_hyperparameters_table(regulators, Q_TARGET_DAY)
 
 # === СОЗДАНИЕ СРАВНИТЕЛЬНЫХ ГИСТОГРАММ ДЛЯ ВСЕХ 4 АЛГОРИТМОВ ===
 plot_all_algorithms_comparison(pid_results, pso_results, gwo_results, aco_results, Q_TARGET_DAY)
